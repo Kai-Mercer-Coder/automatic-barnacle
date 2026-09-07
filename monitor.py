@@ -1,14 +1,12 @@
 import cv2
 import imutils
 import time
-import os
 import threading
 import winsound
 import urllib.parse
 import collections
 import tkinter as tk
 from PIL import Image, ImageTk
-from stealth_alert import StealthAlert
 
 class SecurityMonitor:
     def __init__(self, config, status_callback):
@@ -30,7 +28,6 @@ class SecurityMonitor:
         self.frame_queue = collections.deque(maxlen=2)
         self.display_lock = threading.Lock()
         self.canvas = None
-        self.stealth_alert = None
         
         self._color_map = {
             "red": (0, 0, 255),
@@ -48,36 +45,15 @@ class SecurityMonitor:
         except Exception:
             pass
 
-    def _save_screenshot(self, frame):
-        try:
-            ts = time.strftime("%Y%m%d_%H%M%S")
-            path = os.path.join(self.config.screenshot_dir, f"det_{ts}.jpg")
-            cv2.imwrite(path, frame)
-        except Exception:
-            pass
-
-    def _trigger_alert(self, frame):
-        if self.config.stealth_enabled and self.stealth_alert:
-            try:
-                self.stealth_alert.show_timed(self.config.cooldown_seconds)
-            except Exception as e:
-                print(f"[MONITOR] Stealth alert trigger failed: {e}")
-        if self.config.stealth_beep:
+    def _trigger_alert(self):
+        if getattr(self.config, 'sound_alert', True):
             threading.Thread(target=self.async_beep, daemon=True).start()
-        if self.config.stealth_screenshot:
-            threading.Thread(target=self._save_screenshot, args=(frame,), daemon=True).start()
 
     def start(self, canvas):
         self.canvas = canvas
         self.is_running = True
         self.detection_count = 0
         self.processed_count = 0
-        
-        if self.config.stealth_enabled:
-            self.stealth_alert = StealthAlert(title=self.config.stealth_title)
-            self.stealth_alert.create()
-        
-        os.makedirs(self.config.screenshot_dir, exist_ok=True)
         
         self.status_callback("status", "CONNECTING")
         
@@ -90,9 +66,6 @@ class SecurityMonitor:
             self.camera.release()
             self.camera = None
         self.baseline_frame = None
-        if self.stealth_alert:
-            self.stealth_alert.cleanup()
-            self.stealth_alert = None
 
     def build_rtsp_url(self):
         encoded_pass = urllib.parse.quote_plus(self.config.camera_pass)
@@ -217,7 +190,7 @@ class SecurityMonitor:
                     self.last_beep_time = current_time
                     self.detection_count += 1
                     self.status_callback("detections", self.detection_count)
-                    self._trigger_alert(full_frame)
+                    self._trigger_alert()
             else:
                 cv2.putText(full_frame, "MONITORING ACTIVE", (30, 50), 
                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)

@@ -205,34 +205,14 @@ class SecurityApp:
                                font=('Segoe UI', 8), highlightthickness=0)
             rb.pack(side=tk.LEFT, padx=(6, 0))
         
-        # -- STEALTH ALERTS --
-        self._section(p, "STEALTH ALERTS")
+        # -- SOUND ALERT --
+        self._section(p, "SOUND ALERT")
         
-        self.stealth_var = tk.BooleanVar(value=self.config.stealth_enabled)
-        tk.Checkbutton(p, text="Enable taskbar indicator", variable=self.stealth_var,
+        self.sound_alert_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(p, text="Enable beep on detection", variable=self.sound_alert_var,
                       bg="#111111", fg="#666666", selectcolor="#1a1a1a",
                       activebackground="#111111", activeforeground="#ffffff",
                       font=('Segoe UI', 8), highlightthickness=0).pack(anchor=tk.W, pady=(3, 2))
-        
-        self.stealth_beep_var = tk.BooleanVar(value=self.config.stealth_beep)
-        tk.Checkbutton(p, text="Sound alert", variable=self.stealth_beep_var,
-                      bg="#111111", fg="#666666", selectcolor="#1a1a1a",
-                      activebackground="#111111", activeforeground="#ffffff",
-                      font=('Segoe UI', 8), highlightthickness=0).pack(anchor=tk.W, pady=(0, 2))
-        
-        self.stealth_screenshot_var = tk.BooleanVar(value=self.config.stealth_screenshot)
-        tk.Checkbutton(p, text="Auto-screenshot on detection", variable=self.stealth_screenshot_var,
-                      bg="#111111", fg="#666666", selectcolor="#1a1a1a",
-                      activebackground="#111111", activeforeground="#ffffff",
-                      font=('Segoe UI', 8), highlightthickness=0).pack(anchor=tk.W, pady=(0, 3))
-        
-        # Stealth window title
-        tk.Label(p, text="Indicator window title:", fg="#666666", bg="#111111",
-                font=('Segoe UI', 8)).pack(anchor=tk.W, pady=(4, 1))
-        self.stealth_title_entry = tk.Entry(p, font=('Consolas', 9), bg="#1a1a1a", fg="#ffffff",
-                                           insertbackground="#ffffff", relief=tk.FLAT)
-        self.stealth_title_entry.insert(0, self.config.stealth_title)
-        self.stealth_title_entry.pack(fill=tk.X, pady=(0, 3), ipady=3)
         
         # -- BUTTONS --
         tk.Frame(p, height=1, bg="#222222").pack(fill=tk.X, pady=10)
@@ -437,10 +417,7 @@ class SecurityApp:
         self.config.box_color = self.box_color_var.get()
         self.config.box_thickness = self.box_thickness_slider.get()
         self.config.show_roi_outline = self.show_roi_var.get()
-        self.config.stealth_enabled = self.stealth_var.get()
-        self.config.stealth_beep = self.stealth_beep_var.get()
-        self.config.stealth_screenshot = self.stealth_screenshot_var.get()
-        self.config.stealth_title = self.stealth_title_entry.get().strip() or "Untitled"
+        self.config.sound_alert = self.sound_alert_var.get()
         
         if not self.config.camera_ip or not self.config.camera_port:
             self._update_status("status", "ERROR")

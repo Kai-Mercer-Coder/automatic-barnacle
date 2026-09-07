@@ -18,6 +18,7 @@ class Config:
         self.cooldown_seconds = 2.0
         self.blur_kernel = 7
         self.threshold = 15
+        self.sound_alert = True
         
         # Detection box drawing
         self.box_color = "red"       # red, green, yellow, cyan
@@ -30,13 +31,6 @@ class Config:
         self.buffer_size = 1
         self.skip_frames = 3
         self.resize_interp = "nearest"
-        
-        # Stealth alert
-        self.stealth_enabled = True
-        self.stealth_title = "Untitled"
-        self.stealth_beep = True
-        self.stealth_screenshot = True
-        self.screenshot_dir = "screenshots"
         
     @property
     def roi_x1(self):
