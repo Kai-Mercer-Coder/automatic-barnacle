@@ -20,6 +20,9 @@ class SecurityMonitor:
         self.last_beep_time = 0
         self.current_image = None
         self.processed_count = 0
+        self.last_motion_time = 0
+        self.alert_active = False
+        self.alert_started_time = 0
         
         self.fps = 0
         self.last_fps_time = time.time()
@@ -38,6 +41,9 @@ class SecurityMonitor:
 
     def reset_baseline(self):
         self.baseline_frame = None
+        self.alert_active = False
+        self.alert_started_time = 0
+        self.last_motion_time = 0
 
     def async_beep(self):
         try:
@@ -54,6 +60,9 @@ class SecurityMonitor:
         self.is_running = True
         self.detection_count = 0
         self.processed_count = 0
+        self.last_motion_time = 0
+        self.alert_active = False
+        self.alert_started_time = 0
         
         self.status_callback("status", "CONNECTING")
         
@@ -186,7 +195,19 @@ class SecurityMonitor:
                 cv2.putText(full_frame, "ALERT: INTRUSION", (30, 50), 
                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
                 current_time = time.time()
-                if current_time - self.last_beep_time > self.config.cooldown_seconds:
+                self.last_motion_time = current_time
+
+                if not self.alert_active:
+                    self.alert_active = True
+                    self.alert_started_time = current_time
+
+                # Cap continuous beeping: after alert_max_seconds, adapt scene baseline
+                if current_time - self.alert_started_time > self.config.alert_max_seconds:
+                    self.baseline_frame = roi_gray
+                    self.alert_active = False
+                    cv2.putText(full_frame, "ADAPTING SCENE", (30, 90),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+                elif current_time - self.last_beep_time > self.config.cooldown_seconds:
                     self.last_beep_time = current_time
                     self.detection_count += 1
                     self.status_callback("detections", self.detection_count)
@@ -194,6 +215,15 @@ class SecurityMonitor:
             else:
                 cv2.putText(full_frame, "MONITORING ACTIVE", (30, 50), 
                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+                current_time = time.time()
+                # Scene has been still for a while — adapt baseline to prevent
+                # false triggers on permanent changes (e.g. moved chair)
+                if current_time - self.last_motion_time > self.config.baseline_reset_seconds:
+                    if self.baseline_frame is not None:
+                        self.baseline_frame = roi_gray
+                        cv2.putText(full_frame, "ADAPTING SCENE", (30, 90),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+                    self.alert_active = False
 
             self.processed_count += 1
             if self.processed_count % 30 == 0:

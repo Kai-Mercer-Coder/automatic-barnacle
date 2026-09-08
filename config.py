@@ -19,6 +19,8 @@ class Config:
         self.blur_kernel = 7
         self.threshold = 15
         self.sound_alert = True
+        self.baseline_reset_seconds = 10   # Adapt baseline after this many quiet seconds
+        self.alert_max_seconds = 10        # Cap continuous beeping, then re-adapt scene
         
         # Detection box drawing
         self.box_color = "red"       # red, green, yellow, cyan

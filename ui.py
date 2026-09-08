@@ -184,6 +184,8 @@ class SecurityApp:
         self.cooldown_slider = self._slider(p, "Cooldown", 0.5, 10.0, self.config.cooldown_seconds, res=0.5)
         self.blur_slider = self._slider(p, "Blur Kernel", 3, 31, self.config.blur_kernel, res=2)
         self.threshold_slider = self._slider(p, "Threshold", 5, 100, self.config.threshold)
+        self.adapt_slider = self._slider(p, "Adapt After (s)", 1, 60, self.config.baseline_reset_seconds, res=1)
+        self.maxbeep_slider = self._slider(p, "Max Beep (s)", 1, 60, self.config.alert_max_seconds, res=1)
         
         # -- PERFORMANCE --
         self._section(p, "PERFORMANCE")
@@ -411,6 +413,8 @@ class SecurityApp:
         if self.config.blur_kernel % 2 == 0:
             self.config.blur_kernel += 1
         self.config.threshold = self.threshold_slider.get()
+        self.config.baseline_reset_seconds = self.adapt_slider.get()
+        self.config.alert_max_seconds = self.maxbeep_slider.get()
         self.config.skip_frames = self.skip_slider.get()
         self.config.buffer_size = self.buffer_slider.get()
         self.config.resize_interp = self.resize_var.get()
