@@ -1,7 +1,95 @@
 import tkinter as tk
 from tkinter import ttk
+import tkinter.font as tkfont
 from config import Config
 from monitor import SecurityMonitor
+
+
+class RoundedButton(tk.Canvas):
+    """Canvas-based button with actual rounded corners."""
+
+    def __init__(self, master, text, command, bg="#00ff88", fg="#000000",
+                 active_bg=None, font=('Segoe UI', 10, 'bold'), radius=14,
+                 height=40, disabled_bg="#1c1c1c", disabled_fg="#555555"):
+        self._master_bg = master["bg"]
+        super().__init__(master, bg=self._master_bg, highlightthickness=0,
+                         bd=0, cursor="hand2", height=height)
+        self._command = command
+        self._bg = bg
+        self._fg = fg
+        self._active_bg = active_bg or bg
+        self._font = font
+        self._radius = radius
+        self._height = height
+        self._disabled_bg = disabled_bg
+        self._disabled_fg = disabled_fg
+        self._text = text
+        self._enabled = True
+        self._hover = False
+
+        # Auto-size width to fit the text
+        f = tkfont.Font(font=self._font)
+        self.configure(width=f.measure(text) + 32)
+
+        self.bind("<Button-1>", self._on_click)
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Configure>", lambda e: self._draw())
+        self._draw()
+
+    def _round_rect_points(self, w, h, r):
+        return [
+            r, 0, w - r, 0, w, 0, w, r,
+            w, h - r, w, h, w - r, h, r, h,
+            0, h, 0, h - r, 0, r, 0, 0,
+        ]
+
+    def _draw(self):
+        self.delete("all")
+        w = self.winfo_width()
+        h = self.winfo_height()
+        if w < 10 or h < 10:
+            return
+        if self._enabled:
+            color = self._active_bg if self._hover else self._bg
+            text_color = self._fg
+        else:
+            color = self._disabled_bg
+            text_color = self._disabled_fg
+        r = min(self._radius, w // 2, h // 2)
+        pts = self._round_rect_points(w, h, r)
+        self.create_polygon(pts, smooth=True, fill=color, outline=color)
+        self.create_text(w // 2, h // 2, text=self._text,
+                         fill=text_color, font=self._font)
+
+    def _on_enter(self, _):
+        self._hover = True
+        self._draw()
+
+    def _on_leave(self, _):
+        self._hover = False
+        self._draw()
+
+    def _on_click(self, _):
+        if self._enabled and self._command:
+            self._command()
+
+    def set_text(self, text):
+        self._text = text
+        self._draw()
+
+    def config_button(self, state=None):
+        if state is not None:
+            self._enabled = state != tk.DISABLED
+            self.configure(cursor="hand2" if self._enabled else "arrow")
+            self._draw()
+
+    # Mirror the tk.Button API used elsewhere
+    def config(self, state=None, text=None, **kwargs):
+        if state is not None:
+            self.config_button(state=state)
+        if text is not None:
+            self.set_text(text)
 
 class SecurityApp:
     def __init__(self, window):
@@ -87,9 +175,9 @@ class SecurityApp:
         roi_menu["menu"].config(bg="#1a1a1a", fg="#ffffff", activebackground="#333333")
         roi_menu.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        self.roi_reset_btn = tk.Button(roi_frame, text="Reset", command=self.reset_roi,
-                                      bg="#1a1a1a", fg="#666666", activebackground="#222222",
-                                      activeforeground="#ffffff", relief=tk.FLAT, font=('Segoe UI', 8))
+        self.roi_reset_btn = RoundedButton(roi_frame, text="Reset", command=self.reset_roi,
+                                          bg="#1a1a1a", fg="#777777", active_bg="#2a2a2a",
+                                          font=('Segoe UI', 8), radius=10, height=26)
         self.roi_reset_btn.pack(side=tk.RIGHT, padx=(4, 0))
         
         # Per-edge inputs (percentages)
@@ -140,10 +228,9 @@ class SecurityApp:
         apply_frame = tk.Frame(p, bg="#111111")
         apply_frame.pack(fill=tk.X, pady=(3, 3))
         
-        self.roi_apply_btn = tk.Button(apply_frame, text="Apply", command=self.apply_roi_manual,
-                                      bg="#00ff88", fg="#000000", font=('Segoe UI', 8, 'bold'),
-                                      activebackground="#00cc66", activeforeground="#000000",
-                                      relief=tk.FLAT, cursor="hand2")
+        self.roi_apply_btn = RoundedButton(apply_frame, text="Apply", command=self.apply_roi_manual,
+                                          bg="#00ff88", fg="#000000", active_bg="#00cc66",
+                                          font=('Segoe UI', 8, 'bold'), radius=10, height=26)
         self.roi_apply_btn.pack(side=tk.LEFT)
         
         self.roi_pixel_lbl = tk.Label(apply_frame, text="", fg="#444444", bg="#111111",
@@ -219,16 +306,16 @@ class SecurityApp:
         # -- BUTTONS --
         tk.Frame(p, height=1, bg="#222222").pack(fill=tk.X, pady=10)
         
-        self.start_btn = tk.Button(p, text="START", command=self.start_monitoring,
-                                  bg="#00ff88", fg="#000000", font=('Segoe UI', 10, 'bold'),
-                                  activebackground="#00cc66", activeforeground="#000000",
-                                  relief=tk.FLAT, cursor="hand2", pady=8)
+        self.start_btn = RoundedButton(p, text="START", command=self.start_monitoring,
+                                      bg="#00ff88", fg="#000000", active_bg="#00cc66",
+                                      font=('Segoe UI', 10, 'bold'), radius=16, height=44)
         self.start_btn.pack(fill=tk.X, pady=(0, 5))
         
-        self.stop_btn = tk.Button(p, text="STOP", command=self.stop_monitoring,
-                                 bg="#ff3333", fg="#ffffff", font=('Segoe UI', 10, 'bold'),
-                                 activebackground="#cc0000", activeforeground="#ffffff",
-                                 relief=tk.FLAT, cursor="hand2", state=tk.DISABLED, pady=8)
+        self.stop_btn = RoundedButton(p, text="STOP", command=self.stop_monitoring,
+                                     bg="#ff3333", fg="#ffffff", active_bg="#cc0000",
+                                     font=('Segoe UI', 10, 'bold'), radius=16, height=44,
+                                     disabled_bg="#1c1c1c", disabled_fg="#555555")
+        self.stop_btn.config_button(state=tk.DISABLED)
         self.stop_btn.pack(fill=tk.X)
         
         # -- STATS --
@@ -256,8 +343,11 @@ class SecurityApp:
         self.processed_lbl.pack(anchor=tk.W, pady=(3, 0))
 
     def _section(self, parent, title):
-        tk.Label(parent, text=title, fg="#444444", bg="#111111",
-                font=('Segoe UI', 8, 'bold')).pack(anchor=tk.W, pady=(10, 3))
+        row = tk.Frame(parent, bg="#111111")
+        row.pack(fill=tk.X, pady=(12, 4))
+        tk.Frame(row, bg="#e94560", width=3, height=11).pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(row, text=title, fg="#8a8a8a", bg="#111111",
+                font=('Segoe UI', 8, 'bold')).pack(side=tk.LEFT)
 
     def _entry(self, parent, label, default, show=None):
         tk.Label(parent, text=label, fg="#666666", bg="#111111",
