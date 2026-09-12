@@ -9,12 +9,14 @@ import tkinter as tk
 from PIL import Image, ImageTk
 
 class SecurityMonitor:
-    def __init__(self, config, status_callback):
+    def __init__(self, config, camera, status_callback):
         self.config = config
+        self.camera = camera
+        # status_callback(uid, status_type, value)
         self.status_callback = status_callback
-        
+
         self.is_running = False
-        self.camera = None
+        self.cap = None
         self.baseline_frame = None
         self.detection_count = 0
         self.last_beep_time = 0
@@ -23,15 +25,15 @@ class SecurityMonitor:
         self.last_motion_time = 0
         self.alert_active = False
         self.alert_started_time = 0
-        
+
         self.fps = 0
         self.last_fps_time = time.time()
         self.fps_frame_count = 0
-        
+
         self.frame_queue = collections.deque(maxlen=2)
         self.display_lock = threading.Lock()
         self.canvas = None
-        
+
         self._color_map = {
             "red": (0, 0, 255),
             "green": (0, 255, 0),
@@ -63,22 +65,22 @@ class SecurityMonitor:
         self.last_motion_time = 0
         self.alert_active = False
         self.alert_started_time = 0
-        
-        self.status_callback("status", "CONNECTING")
-        
+
+        self.status_callback(self.camera.uid, "status", "CONNECTING")
+
         self.worker_thread = threading.Thread(target=self.video_loop, daemon=True)
         self.worker_thread.start()
 
     def stop(self):
         self.is_running = False
-        if self.camera:
-            self.camera.release()
-            self.camera = None
+        if self.cap:
+            self.cap.release()
+            self.cap = None
         self.baseline_frame = None
 
     def build_rtsp_url(self):
-        encoded_pass = urllib.parse.quote_plus(self.config.camera_pass)
-        return f"rtsp://{self.config.camera_user}:{encoded_pass}@{self.config.camera_ip}:{self.config.camera_port}/cam/realmonitor?channel=1&subtype=0"
+        encoded_pass = urllib.parse.quote_plus(self.camera.passwd)
+        return f"rtsp://{self.camera.user}:{encoded_pass}@{self.camera.ip}:{self.camera.port}/cam/realmonitor?channel=1&subtype=0"
 
     def _get_resize_method(self):
         methods = {
@@ -90,43 +92,43 @@ class SecurityMonitor:
 
     def video_loop(self):
         rtsp_url = self.build_rtsp_url()
-        
-        self.camera = cv2.VideoCapture(rtsp_url)
-        self.camera.set(cv2.CAP_PROP_BUFFERSIZE, self.config.buffer_size)
-        self.camera.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
-        self.camera.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
-        
+
+        self.cap = cv2.VideoCapture(rtsp_url)
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, self.config.buffer_size)
+        self.cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
+        self.cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
+
         time.sleep(1.0)
-        
-        if not self.camera.isOpened():
-            self.status_callback("status", "ERROR")
+
+        if not self.cap.isOpened():
+            self.status_callback(self.camera.uid, "status", "ERROR")
             self.is_running = False
             return
 
-        self.status_callback("status", "LIVE")
+        self.status_callback(self.camera.uid, "status", "LIVE")
         self.last_fps_time = time.time()
         self.fps_frame_count = 0
         resize_method = self._get_resize_method()
-        
+
         while self.is_running:
             loop_start = time.time()
-            
+
             # Skip buffered frames (configurable)
             skip = self.config.skip_frames
             grabbed = False
             frame = None
             for _ in range(skip + 1):
-                g, f = self.camera.read()
+                g, f = self.cap.read()
                 if g:
                     grabbed = True
                     frame = f
-            
+
             if not grabbed or frame is None:
                 print("[ERROR] Dropped stream frame.")
                 break
-            
+
             full_frame = frame
-            
+
             # Resize using configured method
             interp_flag = {
                 "nearest": cv2.INTER_NEAREST,
@@ -135,11 +137,11 @@ class SecurityMonitor:
             }.get(self.config.resize_interp, cv2.INTER_NEAREST)
             ratio = self.config.process_width / full_frame.shape[1]
             new_h = int(full_frame.shape[0] * ratio)
-            frame_resized = cv2.resize(full_frame, (self.config.process_width, new_h), 
+            frame_resized = cv2.resize(full_frame, (self.config.process_width, new_h),
                                        interpolation=interp_flag)
-            
+
             gray = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2GRAY)
-            
+
             # Use configured blur kernel (must be odd)
             k = self.config.blur_kernel
             if k % 2 == 0:
@@ -158,7 +160,7 @@ class SecurityMonitor:
             fx_end = int(full_w * self.config.roi_x2)
             fy_start = int(full_h * self.config.roi_y1)
             fy_end = int(full_h * self.config.roi_y2)
-            
+
             if self.config.show_roi_outline:
                 cv2.rectangle(full_frame, (fx_start, fy_start), (fx_end, fy_end), (0, 255, 255), 2)
 
@@ -177,22 +179,22 @@ class SecurityMonitor:
             scale_x = (fx_end - fx_start) / max(1, (x_end - x_start))
             scale_y = (fy_end - fy_start) / max(1, (y_end - y_start))
             box_color = self._color_map.get(self.config.box_color, (0, 0, 255))
-            
+
             for contour in contours:
                 if cv2.contourArea(contour) < self.config.sensitivity:
                     continue
                 motion_detected = True
-                
+
                 x, y, w_box, h_box = cv2.boundingRect(contour)
                 actual_x = fx_start + int(x * scale_x)
                 actual_y = fy_start + int(y * scale_y)
                 actual_w = int(w_box * scale_x)
                 actual_h = int(h_box * scale_y)
-                cv2.rectangle(full_frame, (actual_x, actual_y), 
+                cv2.rectangle(full_frame, (actual_x, actual_y),
                              (actual_x + actual_w, actual_y + actual_h), box_color, self.config.box_thickness)
 
             if motion_detected:
-                cv2.putText(full_frame, "ALERT: INTRUSION", (30, 50), 
+                cv2.putText(full_frame, "ALERT: INTRUSION", (30, 50),
                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
                 current_time = time.time()
                 self.last_motion_time = current_time
@@ -210,10 +212,10 @@ class SecurityMonitor:
                 elif current_time - self.last_beep_time > self.config.cooldown_seconds:
                     self.last_beep_time = current_time
                     self.detection_count += 1
-                    self.status_callback("detections", self.detection_count)
+                    self.status_callback(self.camera.uid, "detections", self.detection_count)
                     self._trigger_alert()
             else:
-                cv2.putText(full_frame, "MONITORING ACTIVE", (30, 50), 
+                cv2.putText(full_frame, "MONITORING ACTIVE", (30, 50),
                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
                 current_time = time.time()
                 # Scene has been still for a while — adapt baseline to prevent
@@ -227,25 +229,25 @@ class SecurityMonitor:
 
             self.processed_count += 1
             if self.processed_count % 30 == 0:
-                self.status_callback("processed", self.processed_count)
+                self.status_callback(self.camera.uid, "processed", self.processed_count)
 
             cv2_image = cv2.cvtColor(full_frame, cv2.COLOR_BGR2RGB)
             img_pil = Image.fromarray(cv2_image)
-            
+
             canvas_w = self.canvas.winfo_width()
             canvas_h = self.canvas.winfo_height()
             if canvas_w > 10 and canvas_h > 10:
                 img_pil = img_pil.resize((canvas_w, canvas_h), resize_method)
-                
+
             img_tk = ImageTk.PhotoImage(image=img_pil)
-            
+
             with self.display_lock:
                 self.frame_queue.append(img_tk)
-            
+
             self.canvas.after(0, self.update_canvas)
-            
+
             latency_ms = (time.time() - loop_start) * 1000
-            
+
             self.fps_frame_count += 1
             current_time = time.time()
             elapsed = current_time - self.last_fps_time
@@ -253,21 +255,24 @@ class SecurityMonitor:
                 self.fps = self.fps_frame_count / elapsed
                 self.fps_frame_count = 0
                 self.last_fps_time = current_time
-                self.status_callback("fps", self.fps)
-                self.status_callback("latency", latency_ms)
-            
+                self.status_callback(self.camera.uid, "fps", self.fps)
+                self.status_callback(self.camera.uid, "latency", latency_ms)
+
             elapsed_loop = time.time() - loop_start
             sleep_time = max(0, (1 / self.config.target_fps) - elapsed_loop)
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
     def update_canvas(self):
-        with self.display_lock:
-            if self.frame_queue:
-                img_tk = self.frame_queue[-1]
-            else:
-                return
-        
-        self.current_image = img_tk
-        self.canvas.delete("all")
-        self.canvas.create_image(0, 0, anchor=tk.NW, image=img_tk)
+        try:
+            with self.display_lock:
+                if self.frame_queue:
+                    img_tk = self.frame_queue[-1]
+                else:
+                    return
+
+            self.current_image = img_tk
+            self.canvas.delete("all")
+            self.canvas.create_image(0, 0, anchor=tk.NW, image=img_tk)
+        except tk.TclError:
+            pass
